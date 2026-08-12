@@ -1,0 +1,13 @@
+[package]
+name = "cistron"
+description = "A convention-safe located allele and the normalization rules that govern it"
+keywords = ["genomics", "variant", "normalization", "vcf", "bioinformatics"]
+categories = ["science"]
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]

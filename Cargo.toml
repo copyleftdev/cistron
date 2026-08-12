@@ -1,0 +1,30 @@
+[workspace]
+resolver = "2"
+# The core workspace builds from a bare checkout with no external tools.
+members = ["cistron", "identity", "vcf", "hgvs", "difftest"]
+# `harness` depends on a sibling checkout of tlatools-rs; `hgvs/fuzz` needs
+# nightly + libfuzzer. Both are dev-only validation, excluded from the core.
+exclude = ["harness", "hgvs/fuzz"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/copyleftdev/cistron"
+authors = ["copyleftdev"]
+rust-version = "1.74"
+
+# Internal deps are declared once here so a single version edit (or `bump.sh`,
+# or release-plz) moves the whole workspace in lockstep and keeps the
+# path->version wiring publishable.
+[workspace.dependencies]
+cistron = { path = "cistron", version = "0.1.0" }
+cistron-vcf = { path = "vcf", version = "0.1.0" }
+
+# Release builds are optimized, LTO'd, and stripped.
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+panic = "unwind"

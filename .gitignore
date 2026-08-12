@@ -1,0 +1,7 @@
+/target
+**/target
+mutants.out/
+mutants.out.old/
+hgvs/fuzz/target/
+hgvs/fuzz/corpus/
+hgvs/fuzz/artifacts/

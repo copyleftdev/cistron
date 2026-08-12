@@ -1,0 +1,14 @@
+[package]
+name = "cistron-hgvs"
+description = "The HGVS genomic (g.) boundary for cistron: 3'-shifted nomenclature <-> interbase variants"
+keywords = ["genomics", "hgvs", "variant", "nomenclature", "bioinformatics"]
+categories = ["science"]
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+cistron = { workspace = true }

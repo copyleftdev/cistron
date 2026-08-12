@@ -1,0 +1,14 @@
+[package]
+name = "cistron-vcf"
+description = "The VCF boundary for cistron: 1-based anchored records <-> interbase blunt variants"
+keywords = ["genomics", "vcf", "variant", "normalization", "bioinformatics"]
+categories = ["science"]
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+cistron = { workspace = true }

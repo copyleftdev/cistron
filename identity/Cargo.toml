@@ -1,0 +1,15 @@
+[package]
+name = "cistron-identity"
+description = "Content-addressed variant identifiers over cistron's normal form"
+keywords = ["genomics", "variant", "vrs", "identifier", "bioinformatics"]
+categories = ["science"]
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+cistron = { workspace = true }
+sha2 = "0.10"

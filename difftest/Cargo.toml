@@ -1,0 +1,15 @@
+[package]
+name = "cistron-difftest"
+description = "Differential test of cistron::normalize against bcftools norm"
+version = "0.0.0"
+publish = false
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+cistron = { workspace = true }
+cistron-vcf = { workspace = true }
+
+[[bin]]
+name = "difftest"
+path = "src/main.rs"
