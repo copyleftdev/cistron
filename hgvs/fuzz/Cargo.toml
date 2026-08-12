@@ -12,6 +12,7 @@ libfuzzer-sys = "0.4"
 cistron = { path = "../../cistron" }
 cistron-hgvs = { path = ".." }
 cistron-vcf = { path = "../../vcf" }
+cistron-liftover = { path = "../../liftover" }
 
 [[bin]]
 name = "hgvs_parse"
@@ -23,6 +24,13 @@ bench = false
 [[bin]]
 name = "vcf_parse"
 path = "fuzz_targets/vcf_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "chain_parse"
+path = "fuzz_targets/chain_parse.rs"
 test = false
 doc = false
 bench = false

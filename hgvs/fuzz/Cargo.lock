@@ -28,7 +28,7 @@ checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
 name = "cistron"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "cistron-fuzz"
@@ -36,20 +36,25 @@ version = "0.0.0"
 dependencies = [
  "cistron",
  "cistron-hgvs",
+ "cistron-liftover",
  "cistron-vcf",
  "libfuzzer-sys",
 ]
 
 [[package]]
 name = "cistron-hgvs"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "cistron",
 ]
 
 [[package]]
+name = "cistron-liftover"
+version = "0.1.0"
+
+[[package]]
 name = "cistron-vcf"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "cistron",
 ]

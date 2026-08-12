@@ -10,6 +10,8 @@
 //! blocks are exactly where a lift fails. This crate is the chain *algebra* —
 //! parsing UCSC chain files is a boundary concern layered on top, not here.
 
+pub mod chain;
+
 /// Which strand of the target the source aligns to.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Strand {
