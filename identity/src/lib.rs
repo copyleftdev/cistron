@@ -8,11 +8,14 @@
 //! that. Following VRS, the deleted bases are **not** hashed — after
 //! normalization they are fully determined by `(sequence, start, end)`.
 //!
-//! Note: this uses VRS's *algorithm* (truncated SHA-512, 24 bytes, base64url)
-//! but not VRS's exact byte serialization, so ids carry a `cistron:va.` prefix,
-//! not `ga4gh:VA.`. Byte-for-byte VRS compatibility means swapping
-//! [`canonical_bytes`] for VRS's `ga4gh_serialize`; the interface stays put.
+//! Two id schemes live here. [`variant_id`] is a compact internal
+//! content-address (`cistron:va.`) over `cistron`'s own canonical bytes — useful
+//! as a dedup/join key. The [`vrs`] module and [`ga4gh_allele_id`] emit real
+//! **GA4GH VRS** identifiers (`ga4gh:VA.`), byte-for-byte with the spec (proven
+//! against its worked example), so `cistron` interoperates with every other VRS
+//! tool.
 
+pub mod vrs;
 use cistron::{Error, Variant};
 use sha2::{Digest, Sha512};
 
@@ -68,13 +71,39 @@ pub fn variant_id(
     )))
 }
 
+/// The real GA4GH VRS Allele identifier (`ga4gh:VA.…`) for `variant` on the
+/// sequence named by its refget accession (`refget_accession`, carrying its own
+/// `SQ.` prefix). The variant is left-aligned by [`cistron::Variant::normalize`]
+/// first.
+///
+/// This matches vrs-python for every variant whose left-aligned form equals its
+/// VRS "fully justified" form — all substitutions and non-repeat indels. Indels
+/// inside a tandem repeat need VRS fully-justified normalization to agree; for
+/// those, pass VRS-normalized `start`/`end`/`alt` straight to [`vrs::allele_id`]
+/// until that normalization lands.
+pub fn ga4gh_allele_id(
+    refget_accession: &str,
+    reference: &[cistron::Base],
+    variant: &Variant,
+) -> Result<String, Error> {
+    let norm = variant.normalize(reference)?;
+    let start = norm.pos.get() as u64;
+    let end = start + norm.del.len() as u64;
+    let alt: String = norm
+        .ins
+        .iter()
+        .map(|b| ['A', 'C', 'G', 'T'][b.index() as usize])
+        .collect();
+    Ok(vrs::allele_id(refget_accession, start, end, &alt))
+}
+
 /// Length-prefixed (u32 big-endian) so no two field boundaries can be confused.
 fn put_bytes(buf: &mut Vec<u8>, bytes: &[u8]) {
     buf.extend_from_slice(&(bytes.len() as u32).to_be_bytes());
     buf.extend_from_slice(bytes);
 }
 
-fn base64url_nopad(bytes: &[u8]) -> String {
+pub(crate) fn base64url_nopad(bytes: &[u8]) -> String {
     const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for chunk in bytes.chunks(3) {
@@ -274,5 +303,20 @@ mod tests {
         let id = variant_id("seq", &reference, &v).unwrap();
         assert_eq!(format!("{id}"), id.as_str());
         assert!(id.as_str().starts_with("cistron:va."));
+    }
+
+    #[test]
+    fn ga4gh_bridge_produces_real_vrs_ids() {
+        let acc = "SQ.IIB53T8CNeJJdUqzn9V_JnRtQadwWCbl";
+        let reference = vec![base(0), base(1), base(2), base(3)]; // A C G T
+                                                                  // SNV C>T at interbase 1 (already canonical): start=1, end=2, alt="T".
+        let v = Variant {
+            pos: Interbase::new(1),
+            del: vec![base(1)],
+            ins: vec![base(3)],
+        };
+        let id = ga4gh_allele_id(acc, &reference, &v).unwrap();
+        assert_eq!(id, vrs::allele_id(acc, 1, 2, "T"));
+        assert!(id.starts_with("ga4gh:VA."));
     }
 }

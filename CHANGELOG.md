@@ -7,6 +7,10 @@ All notable changes are documented here. This project follows
 
 ## [Unreleased]
 
+- `cistron-identity::vrs` — real GA4GH VRS identifiers (`ga4gh:VA.`/`SL.`/`SQ.`),
+  byte-for-byte with vrs-python (validated against the spec example and a
+  committed 2,001-vector reference corpus).
+
 - `cistron-liftover` — fallible, never-silent interbase coordinate liftover
   (chain algebra + UCSC `.chain` file parser; `Unmapped`/`Split` errors,
   strand-aware, fuzzed and mutation-clean).
