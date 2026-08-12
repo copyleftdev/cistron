@@ -23,6 +23,7 @@ cistron/          the kernel crate: Base, Interbase, Variant, normalize
 identity/         cistron-identity: content-addressed VariantId over the normal form
 vcf/              cistron-vcf: 1-based anchored VCF records <-> interbase blunt variants
 hgvs/             cistron-hgvs: 3'-shifted genomic (g.) nomenclature <-> interbase variants
+liftover/         cistron-liftover: fallible, never-silent coordinate liftover
 specs/            the rules as TLA+, with an independent TLC cross-check
 harness/          runs cistron::normalize against the spec via the tlatools-rs
                   oracle over an enumerated genome domain (2058 inputs)
@@ -126,11 +127,20 @@ A key thing surfaced: in a tandem repeat the inserted sequence *rotates* between
 the left and right forms (`AC`↔`CA`) — same denotation, different string —
 which is exactly *why* VCF and HGVS disagree, and the kernel now models it.
 
-Next layers, each a crate *depending on* the kernel, never the reverse:
+**`cistron-liftover`** is built: the last coordinate rule, whose discipline is
+*fallible, never silent*. `Chain::lift` maps an interbase interval only when a
+single aligned block covers it end to end; a start in a gap is `Unmapped`, a run
+past a block edge is `Split`, and strand inversion is a target reflection —
+never a plausible-but-wrong number. Plus-strand `lift ∘ invert` is a
+property-tested identity. Parsing UCSC chain files is a boundary concern for
+later, not the core algebra.
 
-- **liftover** — the one remaining coordinate rule: fallible, never silent.
+Next:
+
+- **cistron-liftover chain-file parser** — the UCSC `.chain` boundary crate.
 - **VRS byte-compat** — swap `identity::canonical_bytes` for VRS `ga4gh_serialize`
   to emit real `ga4gh:VA.` ids.
+- **HGVS external oracle** — validate `cistron-hgvs` against biocommons/Mutalyzer.
 
 ## License
 

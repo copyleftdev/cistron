@@ -7,6 +7,9 @@ All notable changes are documented here. This project follows
 
 ## [Unreleased]
 
+- `cistron-liftover` — fallible, never-silent interbase coordinate liftover
+  (chain algebra; `Unmapped`/`Split` errors, strand-aware, mutation-clean).
+
 ## [0.1.0]
 
 Initial release.

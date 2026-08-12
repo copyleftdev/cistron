@@ -45,6 +45,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "cistron-liftover"
+version = "0.1.0"
+
+[[package]]
 name = "cistron-vcf"
 version = "0.1.0"
 dependencies = [

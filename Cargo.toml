@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 # The core workspace builds from a bare checkout with no external tools.
-members = ["cistron", "identity", "vcf", "hgvs", "difftest"]
+members = ["cistron", "identity", "vcf", "hgvs", "liftover", "difftest"]
 # `harness` depends on a sibling checkout of tlatools-rs; `hgvs/fuzz` needs
 # nightly + libfuzzer. Both are dev-only validation, excluded from the core.
 exclude = ["harness", "hgvs/fuzz"]
