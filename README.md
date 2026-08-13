@@ -141,8 +141,8 @@ which is exactly *why* VCF and HGVS disagree, and the kernel now models it.
 single aligned block covers it end to end; a start in a gap is `Unmapped`, a run
 past a block edge is `Split`, and strand inversion is a target reflection —
 never a plausible-but-wrong number. Plus-strand `lift ∘ invert` is a
-property-tested identity. Parsing UCSC chain files is a boundary concern for
-later, not the core algebra.
+property-tested identity, and `chain::parse_chains` reads UCSC `.chain` files
+(checked arithmetic, fuzzed) into `Chain`s.
 
 Next:
 
