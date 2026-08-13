@@ -7,6 +7,10 @@ All notable changes are documented here. This project follows
 
 ## [Unreleased]
 
+- `cistron-hgvs` — genomic rendering validated byte-for-byte against biocommons
+  `hgvs` (2,000-vector differential); added inversion (`inv`) detection/parsing
+  and start-of-sequence `delins`, the two rules the differential surfaced.
+
 - `cistron-identity::vrs` — GA4GH `ReferenceLengthExpression` support; `ga4gh_allele_id`
   now matches vrs-python byte-for-byte for large-repeat variants too (literal +
   RLE state decision), validated by a 2,000-vector differential.

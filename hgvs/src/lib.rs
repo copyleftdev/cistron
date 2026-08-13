@@ -9,9 +9,10 @@
 //! duplication (`dup`) from a plain insertion (`ins`) — a rule that only makes
 //! sense once the variant is 3'-shifted.
 //!
-//! Scope is the genomic level only. Transcript/protein levels (`c.`/`p.`/`n.`/
-//! `m.`), inversions, and conversions are out of the core and are rejected, not
-//! guessed.
+//! Scope is the genomic level only, covering substitutions, deletions,
+//! insertions, duplications, delins, and inversions. Transcript/protein levels
+//! (`c.`/`p.`/`n.`/`m.`) and conversions are out of the core and are rejected,
+//! not guessed. Genomic rendering is validated against biocommons `hgvs`.
 
 use cistron::{Base, Interbase, Variant};
 
@@ -74,15 +75,43 @@ pub fn to_hgvs(reference: &[Base], variant: &Variant) -> Result<String, HgvsErro
             });
         }
         if pos == 0 {
-            return Err(HgvsError::AtSequenceStart);
+            // No 5' base to flank an insertion; HGVS expresses it as a delins on
+            // the first reference base (insert the bases before it).
+            return match reference.first() {
+                Some(&anchor) => Ok(format!("g.1delins{}{}", render(&r.ins), ch(anchor))),
+                None => Err(HgvsError::AtSequenceStart),
+            };
         }
         return Ok(format!("g.{pos}_{}ins{}", pos + 1, render(&r.ins)));
+    }
+    // Inversion: the alternate is the reverse-complement of the deleted bases
+    // (a block replaced by its own reverse complement). HGVS prefers `inv`.
+    if d >= 2 && is_reverse_complement(&r.del, &r.ins) {
+        return Ok(format!("g.{start1}_{end1}inv"));
     }
     Ok(if d == 1 {
         format!("g.{start1}delins{}", render(&r.ins))
     } else {
         format!("g.{start1}_{end1}delins{}", render(&r.ins))
     })
+}
+
+fn complement(b: Base) -> Base {
+    match b {
+        Base::A => Base::T,
+        Base::T => Base::A,
+        Base::C => Base::G,
+        Base::G => Base::C,
+    }
+}
+
+fn is_reverse_complement(del: &[Base], ins: &[Base]) -> bool {
+    del.len() == ins.len()
+        && del
+            .iter()
+            .rev()
+            .map(|&b| complement(b))
+            .eq(ins.iter().copied())
 }
 
 /// Parse an HGVS genomic expression into an interbase variant. Needs the
@@ -159,6 +188,16 @@ pub fn from_hgvs(reference: &[Base], expr: &str) -> Result<Variant, HgvsError> {
         return Ok(Variant {
             pos: Interbase::new(b),
             del: vec![],
+            ins,
+        });
+    }
+    if tail == "inv" {
+        // The segment is replaced by its reverse complement.
+        let del = ref_slice(reference, a, b, n)?;
+        let ins = del.iter().rev().map(|&x| complement(x)).collect();
+        return Ok(Variant {
+            pos: Interbase::from_one_based(a),
+            del,
             ins,
         });
     }
@@ -361,14 +400,15 @@ mod tests {
     }
 
     #[test]
-    fn non_genomic_and_inversion_are_rejected() {
+    fn non_genomic_and_unsupported_are_rejected() {
         let reference = bases("ACGT");
         assert!(matches!(
             from_hgvs(&reference, "c.2C>T"),
             Err(HgvsError::NotGenomic(_))
         ));
+        // conversions remain out of scope
         assert!(matches!(
-            from_hgvs(&reference, "g.1_4inv"),
+            from_hgvs(&reference, "g.1_4con"),
             Err(HgvsError::Unsupported(_))
         ));
         assert!(matches!(
@@ -379,6 +419,21 @@ mod tests {
             from_hgvs(&reference, "g.9del"),
             Err(HgvsError::OutOfBounds)
         ));
+    }
+
+    #[test]
+    fn inversion_round_trips() {
+        // ACGT[1,4) inverted: ref "ACG" -> revcomp "CGT".
+        let reference = bases("ACGT");
+        let inv = Variant {
+            pos: Interbase::new(0),
+            del: bases("ACG"),
+            ins: bases("CGT"),
+        };
+        assert_eq!(to_hgvs(&reference, &inv).unwrap(), "g.1_3inv");
+        let parsed = from_hgvs(&reference, "g.1_3inv").unwrap();
+        assert_eq!(parsed.denotation(&reference), inv.denotation(&reference));
+        assert_eq!(parsed, inv);
     }
 
     #[test]

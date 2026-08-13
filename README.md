@@ -11,7 +11,8 @@ that decide when two spellings are the same variant.
 Normalization is validated **byte-for-byte against `bcftools norm`** (291,600
 cases), and GA4GH VRS identifiers **byte-for-byte against the vrs-python
 reference** — both the digest (2,001 cases) and normalization with its full
-literal-vs-run-length state choice (2,000 cases). Every crate is
+literal-vs-run-length state choice (2,000 cases) — and HGVS genomic rendering
+**byte-for-byte against biocommons `hgvs`** (2,000 cases). Every crate is
 mutation-tested to **0 survivors** (one documented equivalent mutant aside), and
 all parsers are fuzzed.
 
@@ -136,6 +137,10 @@ reference). Round-trip render→parse recovers the left canonical over the domai
 A key thing surfaced: in a tandem repeat the inserted sequence *rotates* between
 the left and right forms (`AC`↔`CA`) — same denotation, different string —
 which is exactly *why* VCF and HGVS disagree, and the kernel now models it.
+Genomic rendering (`>`/`del`/`ins`/`dup`/`delins`/`inv`, including the
+reverse-complement-is-an-`inv` and start-of-sequence-`delins` rules) is validated
+**byte-for-byte against biocommons `hgvs`** over a 2,000-vector differential —
+which is what surfaced those last two rules.
 
 **`cistron-liftover`** is built: the last coordinate rule, whose discipline is
 *fallible, never silent*. `Chain::lift` maps an interbase interval only when a
@@ -147,7 +152,8 @@ property-tested identity, and `chain::parse_chains` reads UCSC `.chain` files
 
 Next:
 
-- **HGVS external oracle** — validate `cistron-hgvs` against biocommons/Mutalyzer.
+- **Transcript-level HGVS** (`c.`/`n.`) and structural/symbolic variants — the
+  remaining variant classes, both deliberately out of the current core.
 
 ## License
 
