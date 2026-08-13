@@ -2,17 +2,11 @@
 name = "cistron-oracle"
 description = "Validates cistron::normalize against specs/Normalize.tla via the tlatools-rs oracle"
 version = "0.0.0"
-edition = "2021"
-license = "MIT OR Apache-2.0"
 publish = false
+edition.workspace = true
+license.workspace = true
 
-# Standalone workspace: excluded from the core so a bare checkout builds without
-# the tlatools-rs sibling clone this harness needs.
-[workspace]
-
-# Note: tla-oracle is a local path into a sibling checkout of
-# github.com/copyleftdev/tlatools-rs. Clone it next to this repo to build.
 [dependencies]
-cistron = { path = "../cistron" }
-tla-oracle = { path = "../../tlatools-rs/crates/tla-oracle" }
+cistron = { workspace = true }
+tla-oracle = "0.2.0"
 serde_json = "1"
