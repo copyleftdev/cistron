@@ -7,6 +7,10 @@ All notable changes are documented here. This project follows
 
 ## [Unreleased]
 
+- `Variant::fully_justified` — GA4GH-VRS fully-justified normalization, matching
+  vrs-python byte-for-byte (2,000-vector differential); `ga4gh_allele_id` now
+  uses it, so VRS ids match the reference for tandem-repeat indels too.
+
 - `cistron-identity::vrs` — real GA4GH VRS identifiers (`ga4gh:VA.`/`SL.`/`SQ.`),
   byte-for-byte with vrs-python (validated against the spec example and a
   committed 2,001-vector reference corpus).

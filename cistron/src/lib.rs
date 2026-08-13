@@ -5,12 +5,14 @@
 //! Coordinates are **interbase**: a position is the count of reference bases
 //! before the locus, so insertions and deletions are symmetric and the
 //! 0-based/1-based ambiguity is converted away at the edges rather than carried
-//! through the core. Normalization is LEFT-aligned + blunt/parsimonious — the
-//! bcftools-norm / GA4GH-VRS convention. HGVS's right-shift is a boundary
-//! concern and lives nowhere in here.
+//! through the core.
 //!
-//! Every rule in this crate is transcribed from `specs/Normalize.tla` and held
-//! to it by the oracle harness in `../harness`.
+//! Three normalizations live here, one per downstream convention:
+//! [`Variant::normalize`] is LEFT-aligned + blunt/parsimonious (bcftools norm,
+//! validated against it byte-for-byte); [`Variant::normalize_right`] is the
+//! 3'-most dual (HGVS); [`Variant::fully_justified`] is GA4GH-VRS expansion
+//! (validated against vrs-python). The canonical `normalize` is transcribed from
+//! `specs/Normalize.tla` and held to it by the oracle harness in `../harness`.
 
 /// A DNA base. `repr(u8)` so it round-trips through a compact integer encoding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -191,6 +193,55 @@ impl Variant {
         })
     }
 
+    /// The **fully-justified** form (GA4GH VRS normalization): trim, then expand
+    /// over the entire ambiguous region by rolling both left and right. Unlike
+    /// [`Variant::normalize`] (leftmost, minimal), this widens the interval to
+    /// cover a whole repeat, with the alternate sequence expanded to match — the
+    /// representation VRS digests. Denotation-preserving.
+    pub fn fully_justified(&self, reference: &[Base]) -> Result<Variant, Error> {
+        self.check(reference)?;
+        let mut start = self.pos.get();
+        let mut end = start + self.del.len();
+        let mut refa = self.del.clone();
+        let mut alta = self.ins.clone();
+
+        // Trim the common prefix, then the common suffix.
+        let mut i = 0;
+        while i < refa.len() && i < alta.len() && refa[i] == alta[i] {
+            i += 1;
+        }
+        start += i;
+        refa.drain(..i);
+        alta.drain(..i);
+        let mut j = 0;
+        while j < refa.len()
+            && j < alta.len()
+            && refa[refa.len() - 1 - j] == alta[alta.len() - 1 - j]
+        {
+            j += 1;
+        }
+        end -= j;
+        refa.truncate(refa.len() - j);
+        alta.truncate(alta.len() - j);
+
+        // Expand: roll left and right as far as the alleles stay periodic with
+        // the reference, then grow the interval and alt to cover the roll.
+        let ldist = roll_left(reference, &refa, &alta, start);
+        let rdist = roll_right(reference, &refa, &alta, end);
+        let new_start = start - ldist;
+        let new_end = end + rdist;
+        let mut new_alt = Vec::with_capacity(ldist + alta.len() + rdist);
+        new_alt.extend_from_slice(&reference[new_start..start]);
+        new_alt.extend_from_slice(&alta);
+        new_alt.extend_from_slice(&reference[end..new_end]);
+
+        Ok(Variant {
+            pos: Interbase(new_start),
+            del: reference[new_start..new_end].to_vec(),
+            ins: new_alt,
+        })
+    }
+
     /// The 3'-most blunt/parsimonious form — the mirror of [`Variant::normalize`],
     /// as HGVS requires. Same trimmed `(del, ins)` as the left form; only the
     /// position differs. Not the canonical id form; use [`Variant::normalize`]
@@ -249,6 +300,58 @@ impl Variant {
             ins,
         })
     }
+}
+
+/// Rolling distance to the left (bioutils EXPAND): how far both alleles stay
+/// periodic with the reference reading leftward from `start`.
+fn roll_left(seq: &[Base], ref_a: &[Base], alt_a: &[Base], start: usize) -> usize {
+    if start == 0 {
+        return 0;
+    }
+    let ref_pos = start - 1; // 0-based base just left of the interval
+    let mut d = 0;
+    while d <= ref_pos {
+        let expected = seq[ref_pos - d];
+        if !cycle_left_ok(ref_a, d, expected) || !cycle_left_ok(alt_a, d, expected) {
+            break;
+        }
+        d += 1;
+    }
+    d
+}
+
+fn cycle_left_ok(a: &[Base], d: usize, expected: Base) -> bool {
+    if a.is_empty() {
+        return true;
+    }
+    let len = a.len() as isize;
+    let idx = (-(d as isize + 1)).rem_euclid(len) as usize;
+    a[idx] == expected
+}
+
+/// Rolling distance to the right, the mirror of [`roll_left`].
+fn roll_right(seq: &[Base], ref_a: &[Base], alt_a: &[Base], end: usize) -> usize {
+    let n = seq.len();
+    if end >= n {
+        return 0;
+    }
+    let max_d = (n - 1) - end;
+    let mut d = 0;
+    while d <= max_d {
+        let expected = seq[end + d];
+        if !cycle_right_ok(ref_a, d, expected) || !cycle_right_ok(alt_a, d, expected) {
+            break;
+        }
+        d += 1;
+    }
+    d
+}
+
+fn cycle_right_ok(a: &[Base], d: usize, expected: Base) -> bool {
+    if a.is_empty() {
+        return true;
+    }
+    a[d % a.len()] == expected
 }
 
 #[cfg(test)]
@@ -474,6 +577,69 @@ mod tests {
             }
         }
         assert!(differ > 0, "no variant shifted — repeats not exercised");
+    }
+
+    #[test]
+    fn fully_justified_preserves_denotation_and_is_idempotent() {
+        let mut expanded = 0;
+        for (reference, raw) in domain(4, 2) {
+            if raw.denotation(&reference) == reference {
+                continue; // null: not a variant (vrs-python rejects these too)
+            }
+            let fj = raw.fully_justified(&reference).unwrap();
+            assert_eq!(
+                fj.denotation(&reference),
+                raw.denotation(&reference),
+                "denotation drifted for {raw:?}"
+            );
+            fj.check(&reference).expect("result is well-formed");
+            assert_eq!(
+                fj.fully_justified(&reference).unwrap(),
+                fj,
+                "not idempotent for {raw:?}"
+            );
+            if fj.del.len() > raw.del.len() {
+                expanded += 1;
+            }
+        }
+        assert!(expanded > 0, "no variant expanded — repeats not exercised");
+    }
+
+    #[test]
+    fn fully_justified_golden_vectors() {
+        // (reference, raw start/end/alt) -> (norm start/end/alt), from vrs-python.
+        let cases: &[(&str, usize, usize, &str, usize, usize, &str)] = &[
+            ("GCAAAAT", 5, 5, "A", 2, 6, "AAAAA"), // insert at run's right end rolls left
+            ("CAAAAG", 2, 3, "", 1, 5, "AAA"),     // delete a middle base of a run
+            ("GACACACT", 1, 1, "AC", 1, 7, "ACACACAC"), // dinucleotide insertion
+            ("GACACACT", 1, 3, "", 1, 7, "ACAC"),  // dinucleotide deletion
+            ("ACGT", 1, 2, "T", 1, 2, "T"),        // SNV: unchanged
+            ("ACGT", 1, 3, "TT", 1, 3, "TT"),      // MNV: unchanged
+            ("GAAAT", 1, 4, "CC", 1, 4, "CC"),     // complex delins: unchanged
+            ("CGAT", 1, 3, "G", 2, 3, ""),         // anchored: shared prefix trims
+            ("CTAG", 1, 3, "A", 1, 2, ""),         // anchored: shared suffix trims
+            ("GCAGCAGCAGT", 7, 10, "", 0, 10, "GCAGCAG"), // trinucleotide left+right roll
+            ("GCAGCAGCAGT", 4, 4, "CAG", 0, 10, "GCAGCAGCAGCAG"), // trinucleotide insertion
+        ];
+        for &(seq, s, e, alt, es, ee, ealt) in cases {
+            let reference = bases(seq);
+            let raw = Variant {
+                pos: Interbase::new(s),
+                del: reference[s..e].to_vec(),
+                ins: bases(alt),
+            };
+            let fj = raw.fully_justified(&reference).unwrap();
+            let got_alt: String = fj
+                .ins
+                .iter()
+                .map(|b| ['A', 'C', 'G', 'T'][b.index() as usize])
+                .collect();
+            assert_eq!(
+                (fj.pos.get(), fj.pos.get() + fj.del.len(), got_alt.as_str()),
+                (es, ee, ealt),
+                "fully_justified {seq} {s}:{e} {alt:?}"
+            );
+        }
     }
 
     /// Long homopolymers and multi-base repeat units: the multi-step roll must

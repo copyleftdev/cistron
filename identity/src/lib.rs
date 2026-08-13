@@ -73,20 +73,20 @@ pub fn variant_id(
 
 /// The real GA4GH VRS Allele identifier (`ga4gh:VA.…`) for `variant` on the
 /// sequence named by its refget accession (`refget_accession`, carrying its own
-/// `SQ.` prefix). The variant is left-aligned by [`cistron::Variant::normalize`]
-/// first.
+/// `SQ.` prefix).
 ///
-/// This matches vrs-python for every variant whose left-aligned form equals its
-/// VRS "fully justified" form — all substitutions and non-repeat indels. Indels
-/// inside a tandem repeat need VRS fully-justified normalization to agree; for
-/// those, pass VRS-normalized `start`/`end`/`alt` straight to [`vrs::allele_id`]
-/// until that normalization lands.
+/// The variant is VRS-normalized ([`cistron::Variant::fully_justified`]) first,
+/// so the result matches the vrs-python reference implementation byte-for-byte
+/// for every variant — substitutions and indels alike, including tandem repeats
+/// (validated against a 2,000-vector vrs-python corpus). Large-repeat variants
+/// that VRS encodes as a run-length expression are the one exception and are not
+/// handled here.
 pub fn ga4gh_allele_id(
     refget_accession: &str,
     reference: &[cistron::Base],
     variant: &Variant,
 ) -> Result<String, Error> {
-    let norm = variant.normalize(reference)?;
+    let norm = variant.fully_justified(reference)?;
     let start = norm.pos.get() as u64;
     let end = start + norm.del.len() as u64;
     let alt: String = norm
