@@ -7,6 +7,10 @@ All notable changes are documented here. This project follows
 
 ## [Unreleased]
 
+- `cistron-identity::vrs` — GA4GH `ReferenceLengthExpression` support; `ga4gh_allele_id`
+  now matches vrs-python byte-for-byte for large-repeat variants too (literal +
+  RLE state decision), validated by a 2,000-vector differential.
+
 - `Variant::fully_justified` — GA4GH-VRS fully-justified normalization, matching
   vrs-python byte-for-byte (2,000-vector differential); `ga4gh_allele_id` now
   uses it, so VRS ids match the reference for tandem-repeat indels too.

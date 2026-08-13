@@ -89,6 +89,21 @@ pub enum Error {
     ReferenceMismatch { pos: usize },
 }
 
+/// The fully-justified expansion of a variant — the raw material the VRS state
+/// decision (literal vs run-length expression) reads. Interbase `[start, end)`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VrsExpansion {
+    pub start: usize,
+    pub end: usize,
+    /// The expanded alternate sequence.
+    pub alt: Vec<Base>,
+    /// Length of the trimmed unit (the deleted or inserted seed).
+    pub seed_length: usize,
+    /// Both alleles survived trimming — a substitution/complex edit, never a
+    /// repeat expansion.
+    pub both_sides: bool,
+}
+
 impl Variant {
     /// The alternate haplotype this variant produces against `reference`.
     /// Assumes the variant is in bounds (true once [`Variant::check`] passes).
@@ -199,6 +214,19 @@ impl Variant {
     /// cover a whole repeat, with the alternate sequence expanded to match — the
     /// representation VRS digests. Denotation-preserving.
     pub fn fully_justified(&self, reference: &[Base]) -> Result<Variant, Error> {
+        let e = self.vrs_expand(reference)?;
+        Ok(Variant {
+            pos: Interbase(e.start),
+            del: reference[e.start..e.end].to_vec(),
+            ins: e.alt,
+        })
+    }
+
+    /// The building blocks the VRS state decision (literal vs run-length) is
+    /// derived from: the fully-justified interval and alt, plus the trimmed
+    /// "seed" unit length and whether both alleles survived trimming (a
+    /// substitution/complex edit, which VRS never expands to a repeat).
+    pub fn vrs_expand(&self, reference: &[Base]) -> Result<VrsExpansion, Error> {
         self.check(reference)?;
         let mut start = self.pos.get();
         let mut end = start + self.del.len();
@@ -224,21 +252,30 @@ impl Variant {
         refa.truncate(refa.len() - j);
         alta.truncate(alta.len() - j);
 
+        let seed_length = if refa.is_empty() {
+            alta.len()
+        } else {
+            refa.len()
+        };
+        let both_sides = !refa.is_empty() && !alta.is_empty();
+
         // Expand: roll left and right as far as the alleles stay periodic with
         // the reference, then grow the interval and alt to cover the roll.
         let ldist = roll_left(reference, &refa, &alta, start);
         let rdist = roll_right(reference, &refa, &alta, end);
         let new_start = start - ldist;
         let new_end = end + rdist;
-        let mut new_alt = Vec::with_capacity(ldist + alta.len() + rdist);
-        new_alt.extend_from_slice(&reference[new_start..start]);
-        new_alt.extend_from_slice(&alta);
-        new_alt.extend_from_slice(&reference[end..new_end]);
+        let mut alt = Vec::with_capacity(ldist + alta.len() + rdist);
+        alt.extend_from_slice(&reference[new_start..start]);
+        alt.extend_from_slice(&alta);
+        alt.extend_from_slice(&reference[end..new_end]);
 
-        Ok(Variant {
-            pos: Interbase(new_start),
-            del: reference[new_start..new_end].to_vec(),
-            ins: new_alt,
+        Ok(VrsExpansion {
+            start: new_start,
+            end: new_end,
+            alt,
+            seed_length,
+            both_sides,
         })
     }
 
@@ -603,6 +640,50 @@ mod tests {
             }
         }
         assert!(expanded > 0, "no variant expanded — repeats not exercised");
+    }
+
+    #[test]
+    fn vrs_expand_reports_seed_and_both_sides() {
+        let reference = bases("ACGT");
+        // substitution: both alleles survive trimming.
+        let e = Variant {
+            pos: Interbase::new(1),
+            del: bases("C"),
+            ins: bases("T"),
+        }
+        .vrs_expand(&reference)
+        .unwrap();
+        assert!(e.both_sides);
+        assert_eq!(e.seed_length, 1);
+        // pure deletion: not both sides; seed is the deleted length.
+        let e = Variant {
+            pos: Interbase::new(1),
+            del: bases("C"),
+            ins: vec![],
+        }
+        .vrs_expand(&reference)
+        .unwrap();
+        assert!(!e.both_sides);
+        assert_eq!(e.seed_length, 1);
+        // pure insertion: not both sides; seed is the inserted length.
+        let e = Variant {
+            pos: Interbase::new(1),
+            del: vec![],
+            ins: bases("CG"),
+        }
+        .vrs_expand(&reference)
+        .unwrap();
+        assert!(!e.both_sides);
+        assert_eq!(e.seed_length, 2);
+        // anchored form that trims down to a pure deletion.
+        let e = Variant {
+            pos: Interbase::new(0),
+            del: bases("AC"),
+            ins: bases("A"),
+        }
+        .vrs_expand(&reference)
+        .unwrap();
+        assert!(!e.both_sides);
     }
 
     #[test]

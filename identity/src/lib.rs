@@ -75,26 +75,98 @@ pub fn variant_id(
 /// sequence named by its refget accession (`refget_accession`, carrying its own
 /// `SQ.` prefix).
 ///
-/// The variant is VRS-normalized ([`cistron::Variant::fully_justified`]) first,
-/// so the result matches the vrs-python reference implementation byte-for-byte
-/// for every variant — substitutions and indels alike, including tandem repeats
-/// (validated against a 2,000-vector vrs-python corpus). Large-repeat variants
-/// that VRS encodes as a run-length expression are the one exception and are not
-/// handled here.
+/// The variant is VRS-normalized (fully-justified) and the state is chosen the
+/// way vrs-python does — a `LiteralSequenceExpression` for substitutions and
+/// non-repeat edits, a `ReferenceLengthExpression` for repeat expansions — so
+/// the identifier matches the reference implementation byte-for-byte for every
+/// variant, validated against a vrs-python corpus.
 pub fn ga4gh_allele_id(
     refget_accession: &str,
     reference: &[cistron::Base],
     variant: &Variant,
 ) -> Result<String, Error> {
-    let norm = variant.fully_justified(reference)?;
-    let start = norm.pos.get() as u64;
-    let end = start + norm.del.len() as u64;
-    let alt: String = norm
-        .ins
+    let e = variant.vrs_expand(reference)?;
+    let (start, end) = (e.start as u64, e.end as u64);
+    let ref_len = e.end - e.start;
+    let alt_len = e.alt.len();
+
+    // Literal state: a substitution/complex edit (both alleles survived trim), or
+    // a pure insertion that did not expand the reference. (A pure indel that did
+    // expand is never equal-length, so `alt_len == ref_len` cannot reach here.)
+    if e.both_sides || ref_len == 0 {
+        return Ok(vrs::allele_id(
+            refget_accession,
+            start,
+            end,
+            &alt_string(&e.alt),
+        ));
+    }
+    // Deletion in a repeat: run-length expression, subunit = the seed length.
+    // (`alt_len != ref_len` here, so `<` distinguishes deletion from insertion.)
+    if alt_len < ref_len {
+        return Ok(vrs::rle_allele_id(
+            refget_accession,
+            start,
+            end,
+            alt_len as u64,
+            e.seed_length as u64,
+        ));
+    }
+    // Insertion in a repeat: RLE if a whole repeat subunit (a factor of the seed)
+    // tiles the inserted tail; otherwise a literal.
+    let extended_ref = &reference[e.start..e.end];
+    for cycle_length in factors_desc(e.seed_length) {
+        if cycle_length > ref_len {
+            continue;
+        }
+        if is_valid_cycle(ref_len - cycle_length, extended_ref, &e.alt) {
+            return Ok(vrs::rle_allele_id(
+                refget_accession,
+                start,
+                end,
+                alt_len as u64,
+                cycle_length as u64,
+            ));
+        }
+    }
+    Ok(vrs::allele_id(
+        refget_accession,
+        start,
+        end,
+        &alt_string(&e.alt),
+    ))
+}
+
+fn alt_string(bases: &[cistron::Base]) -> String {
+    bases
         .iter()
         .map(|b| ['A', 'C', 'G', 'T'][b.index() as usize])
-        .collect();
-    Ok(vrs::allele_id(refget_accession, start, end, &alt))
+        .collect()
+}
+
+/// Divisors of `n` in descending order (matching vrs-python's `_factor_gen`).
+/// `n` is a seed length — small — so trial division over `1..=n` is fine and
+/// avoids the redundant `i` / `n/i` pairing (whose dedup has no observable
+/// effect and is therefore untestable).
+fn factors_desc(n: usize) -> Vec<usize> {
+    (1..=n).filter(|d| n % d == 0).rev().collect()
+}
+
+/// Does `target[template.len()..]` continue the cyclic repetition of
+/// `template[cycle_start..]`? (vrs-python's `_is_valid_cycle`.)
+fn is_valid_cycle(
+    cycle_start: usize,
+    template: &[cistron::Base],
+    target: &[cistron::Base],
+) -> bool {
+    let sub = &template[cycle_start..];
+    if sub.is_empty() {
+        return false;
+    }
+    target[template.len()..]
+        .iter()
+        .enumerate()
+        .all(|(k, ch)| *ch == sub[k % sub.len()])
 }
 
 /// Length-prefixed (u32 big-endian) so no two field boundaries can be confused.

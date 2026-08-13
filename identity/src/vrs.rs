@@ -74,6 +74,32 @@ pub fn allele_id(refget_accession: &str, start: u64, end: u64, alt: &str) -> Str
     )
 }
 
+/// Canonical serialization of an Allele whose state is a ReferenceLengthExpression
+/// (a large repeat expansion). The `sequence` field is *excluded* from the digest,
+/// so the id depends only on the interval, `length`, and `repeatSubunitLength`.
+fn rle_allele_serialize(location_digest: &str, length: u64, repeat_subunit_length: u64) -> String {
+    format!(
+        "{{\"location\":\"{location_digest}\",\
+         \"state\":{{\"length\":{length},\"repeatSubunitLength\":{repeat_subunit_length},\
+         \"type\":\"ReferenceLengthExpression\"}},\"type\":\"Allele\"}}"
+    )
+}
+
+/// The Allele identifier for a run-length-expressed variant (`ga4gh:VA.…`).
+pub fn rle_allele_id(
+    refget_accession: &str,
+    start: u64,
+    end: u64,
+    length: u64,
+    repeat_subunit_length: u64,
+) -> String {
+    let loc = location_digest(refget_accession, start, end);
+    format!(
+        "ga4gh:VA.{}",
+        sha512t24u(rle_allele_serialize(&loc, length, repeat_subunit_length).as_bytes())
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -99,6 +125,24 @@ mod tests {
         assert_eq!(
             allele_id(ACC, 44908821, 44908822, "T"),
             "ga4gh:VA.0AePZIWZUNsUlQTamyLrjm2HWUw2opLt"
+        );
+    }
+
+    /// Run-length-expression Allele ids against vrs-python reference values
+    /// (a 4-base deletion and a 10-base insertion in a 60-base A-run at [1,61)).
+    #[test]
+    fn rle_allele_ids() {
+        assert_eq!(
+            location_digest(ACC, 1, 61),
+            "L3WZOuLPUmIUCJ-hKYObXR_LieL7oXSB"
+        );
+        assert_eq!(
+            rle_allele_id(ACC, 1, 61, 56, 4),
+            "ga4gh:VA.2QZjIh4_0ipE8mdtFd1RGOAM8wElTaFj"
+        );
+        assert_eq!(
+            rle_allele_id(ACC, 1, 61, 70, 10),
+            "ga4gh:VA.v9pAnGWFLKu-ca-gFBGXHJBsL7P5ZmgL"
         );
     }
 

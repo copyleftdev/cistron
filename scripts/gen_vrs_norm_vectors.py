@@ -21,7 +21,7 @@ def rand_seq():
     alpha = "".join(random.sample("ACGT", random.choice([2, 2, 3, 4])))  # bias to repeats
     return "".join(random.choice(alpha) for _ in range(random.randrange(8, 21)))
 
-rows, rle_skipped, null_skipped = [], 0, 0
+rows, null_skipped = [], 0
 target = 2000
 while len(rows) < target:
     seq = rand_seq()
@@ -39,12 +39,9 @@ while len(rows) < target:
         n = normalize(allele, MemProxy(seq))
     except Exception:
         continue
-    if not isinstance(n.state, models.LiteralSequenceExpression):
-        rle_skipped += 1
-        continue  # run-length-encoded state: out of scope for the literal digest
     rows.append((seq, start, end, alt, ga4gh_identify(n)))
 
 with open("identity/tests/vrs_norm_vectors.tsv", "w") as fh:
     for seq, s, e, alt, vid in rows:
         fh.write(f"{seq}\t{s}\t{e}\t{alt}\t{vid}\n")
-print(f"wrote {len(rows)} vectors ({null_skipped} null skipped, {rle_skipped} RLE skipped)")
+print(f"wrote {len(rows)} vectors ({null_skipped} null skipped, RLE included)")
